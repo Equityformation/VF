@@ -1797,41 +1797,17 @@ const PROXY = 'https://mute-wind-c243.archive-du-trading.workers.dev';
 
 async function fetchS(id){
   const agg = 'eop';
-  // Essai 1 : Netlify Function proxy
-  try {
-    const url = `${PROXY}?series_id=${id}&observation_start=1999-01-01&frequency=m&aggregation_method=${agg}`;
-    const r = await fetch(url, {signal: AbortSignal.timeout(15000)});
-    if(r.ok){
-      const j = await r.json();
-      if(j.observations){
-        const m={};
-        for(const o of j.observations){
-          if(o.value && o.value!=='.') m[o.date.slice(0,7)] = parseFloat(o.value);
-        }
-        return m;
-      }
-    }
-  } catch(e){ console.warn('Proxy Netlify échoué, essai fallback...', e.message); }
-
-  // Essai 2 : allorigins proxy CORS (fallback)
-  try {
-    const fredDirect = `https://api.stlouisfed.org/fred/series/observations?series_id=${id}&api_key=${FRED_KEY}&file_type=json&observation_start=1999-01-01&frequency=m&aggregation_method=${agg}`;
-    const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(fredDirect)}`;
-    const r2 = await fetch(proxyUrl, {signal: AbortSignal.timeout(20000)});
-    if(r2.ok){
-      const wrapper = await r2.json();
-      const j = JSON.parse(wrapper.contents);
-      if(j.observations){
-        const m={};
-        for(const o of j.observations){
-          if(o.value && o.value!=='.') m[o.date.slice(0,7)] = parseFloat(o.value);
-        }
-        return m;
-      }
-    }
-  } catch(e2){ console.warn('Fallback allorigins échoué aussi', e2.message); }
-
-  throw new Error(`${id}: tous les proxys ont échoué`);
+  const url = `${PROXY}?series_id=${id}&observation_start=1999-01-01&frequency=m&aggregation_method=${agg}`;
+  const r = await fetch(url, {signal: AbortSignal.timeout(20000)});
+  if(!r.ok) throw new Error(`${id}: HTTP ${r.status}`);
+  const j = await r.json();
+  if(j.error_code) throw new Error(`${id}: ${j.error_message}`);
+  if(!j.observations) throw new Error(`${id}: pas d'observations`);
+  const m={};
+  for(const o of j.observations){
+    if(o.value && o.value!=='.') m[o.date.slice(0,7)] = parseFloat(o.value);
+  }
+  return m;
 }
 function gv(map,d){
   if(!map) return null;
@@ -3126,7 +3102,7 @@ async function init(){
     });
     const [yM,vM,sM,imM,isM,spgM]=await Promise.all([
       fetchS('T10Y2Y'),fetchS('VIXCLS'),fetchS('BAMLH0A0HYM2'),
-      fetchS('NAPM'),fetchS('NFCI'),fetchS('BSXRLV02USM086S'),
+      Promise.resolve({}),fetchS('NFCI'),fetchS('BSXRLV02USM086S'),
     ]);
     // Injecter les valeurs manuelles dans imM (override NAPM pour 2022+)
     // Fusionner : ISM_MANUAL prime, S&P Global PMI (spgM) comble les gaps post-2007
